@@ -1,0 +1,10 @@
+services:
+  rag_app:
+    build: .
+    container_name: rag-chatbot-app
+    ports:
+      - "3003:3003"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - .:/app
