@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@firebase/firestore": "^4.7.6",
-    "@langchain/community": "^0.3.25",
+    "@langchain/community": "^0.3.32",
     "@langchain/openai": "^0.3.17",
     "axios": "^1.7.9",
     "cheerio": "^1.0.0",
@@ -27,6 +27,8 @@
     "express": "^4.21.2",
     "firebase": "^11.2.0",
     "langchain": "^0.3.11",
-    "mysql2": "^3.6.0"
+    "multer": "^1.4.5-lts.1",
+    "mysql2": "^3.6.0",
+    "pdf.js-extract": "^0.2.1"
   }
 }
