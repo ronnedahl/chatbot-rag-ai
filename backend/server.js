@@ -43,7 +43,7 @@ const upload = multer({
 });
 
 const model = new Ollama({
-  baseUrl: "http://ollama:11434", // använder container-namn istället för localhost
+  baseUrl: "http://ollama:11434", 
   model: "mistral:latest",
   temperature: 0.1,
 });
@@ -67,8 +67,7 @@ ${query}
 }
 
 const embeddings = new OllamaEmbeddings({
-  baseUrl: "http://ollama:11434", // använder container-namn istället för localhost
-  model: "mistral:latest",
+  baseUrl: "http://ollama:11434", 
 });
 
 let vectorStore;
@@ -186,19 +185,19 @@ app.post('/api/chat', async (req, res) => {
       vectorStore = new FirebaseVectorStore(firebaseConfig, embeddings);
     }
 
-    // Hämta relevanta dokument
+   
     const retriever = vectorStore.asRetriever(4);
     const relevantDocs = await retriever.getRelevantDocuments(question);
     
-    // Kombinera kontexten från dokumenten
+   
     const context = relevantDocs
       .map(doc => doc.pageContent)
       .join('\n\n');
 
-    // Skapa den formaterade prompten
+    
     const formattedPrompt = await createPromptTemplate(context, question);
 
-    // Generera svar med den formaterade prompten
+    
     const response = await model.call(formattedPrompt);
 
     res.json({ answer: response });
