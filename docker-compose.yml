@@ -1,0 +1,58 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - app-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+  
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: bostr-backend-service
+    ports:
+      - "3003:3003"
+    depends_on:
+      - ollama
+    environment:
+      - PORT=3003
+      - NODE_ENV=development
+    networks:
+      - app-network
+    restart: unless-stopped
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+  
+  frontend:
+    build:
+      context: ./frontend/frontend
+      dockerfile: Dockerfile.dev
+    container_name: bostr-frontend-service
+    ports:
+      - "80:5173"
+    depends_on:
+      - backend
+    environment:
+      - VITE_API_URL=http://localhost:3003
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  ollama_data:

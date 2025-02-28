@@ -1,36 +1,104 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import axios from 'axios';
-import { Send, Upload, X } from 'lucide-react';
+import { Send, Upload, X, FileUp } from 'lucide-react';
 
-const API_BASE_URL = 'http://localhost:3003';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3003';
+
+const axiosInstance = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json'
+  }
+});
 
 export default function App() {
   const [messages, setMessages] = useState([
-    { role: 'assistant', content: '👋 Hej Jag är din assistent vad vill du ha hjälp med ?' }
+    { role: 'assistant', content: '👋 Hej Jag är din bstr assistent vad vill du ha hjälp med ?' }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [uploadContent, setUploadContent] = useState('');
   const [uploadType, setUploadType] = useState('text');
+  const [selectedFile, setSelectedFile] = useState(null);
+  const fileInputRef = useRef(null);
+
+  const handleFileSelect = (event) => {
+    const file = event.target.files[0];
+    if (file && file.type === 'application/pdf') {
+      setSelectedFile(file);
+      setUploadContent(file.name); 
+    } else {
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: 'Error: Endast PDF-filer är tillåtna.'
+      }]);
+    }
+  };
 
   const handleUpload = async () => {
     try {
       setLoading(true);
-      await axios.post(`${API_BASE_URL}/api/load-documents`, {
-        content: uploadContent,
-        type: uploadType
-      });
+      let payload;
+
+      if (uploadType === 'pdf' && selectedFile) {
+        
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        formData.append('type', 'pdf');
+
+       
+        const response = await axios.post(`${API_BASE_URL}/api/load-documents`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          }
+        });
+
+        payload = response.data;
+      } else {
+       
+        payload = {
+          type: uploadType,
+          [uploadType === 'url' ? 'url' : 'content']: uploadContent
+        };
+
+        await axiosInstance.post('/api/load-documents', payload);
+      }
+      
       setShowUpload(false);
       setUploadContent('');
+      setSelectedFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
       setMessages(prev => [...prev, { 
         role: 'assistant', 
         content: 'Training data uploaded successfully!'
       }]);
     } catch (error) {
+      console.error('Upload error:', error);
+      let errorMessage;
+
+      if (uploadType === 'url') {
+        if (error.message.includes('CORS') || error.message.includes('Network Error')) {
+          errorMessage = 'Åtkomst nekad: Kunde inte nå den angivna URL:en. Kontrollera att webbplatsen tillåter åtkomst.';
+        } else if (error.response?.status === 403) {
+          errorMessage = 'Åtkomst nekad: Webbplatsen blockerar åtkomst till innehållet.';
+        } else if (error.response?.status === 404) {
+          errorMessage = 'URL:en kunde inte hittas. Kontrollera att adressen är korrekt.';
+        } else {
+          errorMessage = 'Kunde inte hämta innehåll från URL:en. Försök med en annan URL eller använd textinmatning istället.';
+        }
+      } else if (uploadType === 'pdf') {
+        errorMessage = 'Kunde inte ladda upp PDF-filen. Kontrollera att filen är korrekt och försök igen.';
+      } else {
+        errorMessage = error.response?.data?.error || error.message;
+      }
+
       setMessages(prev => [...prev, { 
         role: 'assistant', 
-        content: 'Error uploading training data: ' + error.message
+        content: `Error: ${errorMessage}`
       }]);
     } finally {
       setLoading(false);
@@ -47,7 +115,7 @@ export default function App() {
     
     try {
       setLoading(true);
-      const response = await axios.post(`${API_BASE_URL}/api/chat`, {
+      const response = await axiosInstance.post('/api/chat', {
         question: userMessage
       });
       setMessages(prev => [...prev, { 
@@ -55,9 +123,10 @@ export default function App() {
         content: response.data.answer 
       }]);
     } catch (error) {
+      console.error('Chat error:', error);
       setMessages(prev => [...prev, { 
         role: 'assistant', 
-        content: 'Error: ' + error.message
+        content: 'Error: ' + (error.response?.data?.error || error.message)
       }]);
     } finally {
       setLoading(false);
@@ -88,21 +157,51 @@ export default function App() {
             <select 
               className="w-full p-2 mb-2 bg-gray-700 text-gray-200 rounded border border-gray-600"
               value={uploadType}
-              onChange={(e) => setUploadType(e.target.value)}
+              onChange={(e) => {
+                setUploadType(e.target.value);
+                setUploadContent('');
+                setSelectedFile(null);
+                if (fileInputRef.current) {
+                  fileInputRef.current.value = '';
+                }
+              }}
             >
               <option value="text">Text</option>
               <option value="url">URL</option>
+              <option value="pdf">PDF File</option>
             </select>
-            <textarea
-              className="w-full p-2 mb-2 bg-gray-700 text-gray-200 rounded border border-gray-600"
-              value={uploadContent}
-              onChange={(e) => setUploadContent(e.target.value)}
-              placeholder={uploadType === 'url' ? 'Enter URL...' : 'Enter text...'}
-              rows={4}
-            />
+
+            {uploadType === 'pdf' ? (
+              <div className="mb-2">
+                <input
+                  type="file"
+                  accept=".pdf"
+                  onChange={handleFileSelect}
+                  ref={fileInputRef}
+                  className="hidden"
+                  id="pdf-upload"
+                />
+                <label 
+                  htmlFor="pdf-upload"
+                  className="flex items-center justify-center w-full p-2 bg-gray-700 text-gray-200 rounded border border-gray-600 cursor-pointer hover:bg-gray-600"
+                >
+                  <FileUp className="h-5 w-5 mr-2" />
+                  {selectedFile ? selectedFile.name : 'Välj PDF-fil'}
+                </label>
+              </div>
+            ) : (
+              <textarea
+                className="w-full p-2 mb-2 bg-gray-700 text-gray-200 rounded border border-gray-600"
+                value={uploadContent}
+                onChange={(e) => setUploadContent(e.target.value)}
+                placeholder={uploadType === 'url' ? 'Enter URL...' : 'Enter text...'}
+                rows={4}
+              />
+            )}
+
             <button
               onClick={handleUpload}
-              disabled={loading || !uploadContent}
+              disabled={loading || (!uploadContent && !selectedFile)}
               className="w-full py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-600"
             >
               {loading ? 'Uploading...' : 'Upload'}
