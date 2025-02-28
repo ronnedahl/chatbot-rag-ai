@@ -1,7 +1,6 @@
 // server.js
 import express from 'express';
 import cors from 'cors';
-import { RetrievalQAChain } from 'langchain/chains';
 import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
 import { Ollama } from '@langchain/community/llms/ollama';
 import { OllamaEmbeddings } from '@langchain/community/embeddings/ollama';
@@ -19,14 +18,15 @@ const app = express();
 const pdfExtract = new PDFExtract();
 
 app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  origin: ['http://localhost:5173', 'http://localhost:3003', 'http://localhost', 'http://localhost:80'],
+  methods: ['GET', 'POST', 'OPTIONS', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
 
+app.options('*', cors());
+
 app.use(express.json());
-
-
 const storage = multer.memoryStorage();
 const upload = multer({
   storage: storage,
@@ -43,18 +43,19 @@ const upload = multer({
 });
 
 const model = new Ollama({
-  baseUrl: "http://localhost:11434", 
+  baseUrl: "http://ollama:11434", // använder container-namn istället för localhost
   model: "mistral:latest",
-  temperature: 0.4,
+  temperature: 0.1,
 });
 
 async function createPromptTemplate(context, query) {
   return `
 [SYSTEM]
-Du är en hjälpsam AI-assistent som svarar på svenska. Använd informationen i kontexten för att besvara frågan. 
-Om du inte hittar relevant information i kontexten, säg det ärligt.
-Basera ditt svar endast på den givna kontexten.
-
+Du är en hjälpsam AI-assistent som svarar på svenska. Du är expert på att analysera information och ge koncisa, korrekta svar.
+Använd ENBART informationen i kontexten för att besvara frågan. 
+Om du inte hittar relevant information i kontexten, säg "Jag har inte tillräcklig information för att besvara denna fråga." 
+Basera ditt svar endast på den givna kontexten och inte på tidigare kunskap.
+Var specifik och ge direkta svar när möjligt.
 [KONTEXT]
 ${context}
 
@@ -66,7 +67,7 @@ ${query}
 }
 
 const embeddings = new OllamaEmbeddings({
-  baseUrl: "http://localhost:11434",
+  baseUrl: "http://ollama:11434", // använder container-namn istället för localhost
   model: "mistral:latest",
 });
 
@@ -112,7 +113,7 @@ async function extractTextFromPDF(buffer) {
 async function initializeVectorStore(content, sourceType, sourceUrl = '') {
   try {
     const textSplitter = new RecursiveCharacterTextSplitter({
-      chunkSize: 500,
+      chunkSize: 800,
       chunkOverlap: 100,
     });
 
@@ -186,7 +187,7 @@ app.post('/api/chat', async (req, res) => {
     }
 
     // Hämta relevanta dokument
-    const retriever = vectorStore.asRetriever(8);
+    const retriever = vectorStore.asRetriever(4);
     const relevantDocs = await retriever.getRelevantDocuments(question);
     
     // Kombinera kontexten från dokumenten
@@ -206,6 +207,15 @@ app.post('/api/chat', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+app.use((err, req, res, next) => {
+  console.error('Serverfel:', err.stack);
+  res.status(500).json({ 
+    error: 'Ett serverfel inträffade', 
+    details: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
+});
+
 const PORT = process.env.PORT || 3003;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
