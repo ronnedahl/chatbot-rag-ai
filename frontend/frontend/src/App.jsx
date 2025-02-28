@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import axios from 'axios';
 import { Send, Upload, X, FileUp } from 'lucide-react';
 
-const API_BASE_URL = 'http://localhost:3003';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3003';
 
 const axiosInstance = axios.create({
   baseURL: API_BASE_URL,
